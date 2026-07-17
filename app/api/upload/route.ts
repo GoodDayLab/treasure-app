@@ -26,9 +26,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "找不到這個收藏項目" }, { status: 404 });
   }
 
+  // 明確指定 token,不要讓 SDK 自動偵測 OIDC——這個專案的 OIDC 沒有對所有環境開放,
+  // 自動偵測會在部分環境誤用 OIDC 導致上傳失敗。
   const blob = await put(`collection-items/${itemId}/${file.name}`, file, {
     access: "public",
     addRandomSuffix: true,
+    token: process.env.BLOB_READ_WRITE_TOKEN,
   });
 
   await prisma.photo.updateMany({ where: { itemId }, data: { isPrimary: false } });
