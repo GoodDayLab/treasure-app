@@ -1,0 +1,58 @@
+/*
+  Treasure Design Tokens — 對應 Step 6 定案
+  UI 元件圓角(8px)刻意跟照片相框圓角(2px)不同,
+  一個代表工具的理性,一個代表收藏品的莊重。
+*/
+
+:root {
+  /* 中性底色 */
+  --color-bg: #F7F3EC;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F1EEE6;
+  --color-border: #D3D1C7;
+  --color-text-primary: #2C2C2A;
+  --color-text-secondary: #5F5E5A;
+  --color-text-muted: #888780;
+
+  /* 強調色——琥珀金,節制使用:價格、CTA、選中狀態 */
+  --color-accent: #B8863A;
+  --color-accent-text: #6B4A1E;
+  --color-accent-bg: #F5EBDA;
+
+  /* 漲跌語意色——刻意選沉穩色調,避免螢光色破壞質感 */
+  --color-success: #3B6D11;
+  --color-success-bg: #EAF3DE;
+  --color-danger: #A32D2D;
+  --color-danger-bg: #FCEBEB;
+
+  /* 雙字體——UI 負責理性(數字/導覽),Voice 負責感性(故事/展覽文字) */
+  --font-ui: "Inter", "Noto Sans TC", -apple-system, sans-serif;
+  --font-voice: "Noto Serif TC", "Source Han Serif TC", serif;
+
+  /* 圓角——UI 元件現代感 vs 照片相框博物館感,刻意形成對比 */
+  --radius-ui: 8px;
+  --radius-card: 12px;
+  --radius-frame: 2px;
+
+  /* 卡牌照片固定比例 */
+  --aspect-card: 5 / 7;
+}
+
+[data-theme="dark"] {
+  --color-bg: #1C1B18;
+  --color-surface: #26251F;
+  --color-surface-muted: #2E2C25;
+  --color-border: #444441;
+  --color-text-primary: #E8E4DA;
+  --color-text-secondary: #B4B2A9;
+  --color-text-muted: #888780;
+
+  --color-accent: #D6A75C;
+  --color-accent-text: #E8C68C;
+  --color-accent-bg: #3A2E18;
+
+  --color-success: #97C459;
+  --color-success-bg: #1F2E12;
+  --color-danger: #F09595;
+  --color-danger-bg: #3A1616;
+}

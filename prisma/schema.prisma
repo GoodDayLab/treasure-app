@@ -1,0 +1,172 @@
+// Treasure — Database schema
+// 對應 Step 4 定案的 ER 設計,關鍵設計決策直接寫在註解裡,
+// 方便未來的工程師(包含未來的你)理解「為什麼」不只是「是什麼」。
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  displayName     String
+  defaultCurrency String   @default("TWD")
+  createdAt       DateTime @default(now())
+
+  collectionItems CollectionItem[]
+  tagDimensions   TagDimension[]
+
+  @@map("users")
+}
+
+// 卡牌型錄——同一張卡的「基本資料」只存一份,不管有幾個使用者擁有它。
+model Card {
+  id         String  @id @default(uuid())
+  game       String // 寶可夢 / 遊戲王 / 航海王 / 運動卡...
+  series     String
+  cardNumber String
+  name       String // 卡片本身的名稱,例如「工藤新一」「皮卡丘」——原設計沒有這個欄位,補上是因為沒有它前端無法顯示卡片身分
+  edition    String?
+  imageUrl   String?
+
+  variants CardVariant[]
+
+  @@map("cards")
+}
+
+// 卡牌版本——裸卡本身就是一個正式的 variant,不是特例。
+// 這一層存在的唯一理由:讓同一張卡的「裸卡」「PSA 9」「PSA 10」...
+// 各自擁有獨立的價格曲線,同時讓裸卡收藏者也能查到鑑定後的參考價。
+model CardVariant {
+  id             String  @id @default(uuid())
+  cardId         String
+  card           Card    @relation(fields: [cardId], references: [id])
+  variantType    String // "raw" | "graded"
+  gradingCompany String? // "PSA" | "BGS" | "CGC" | "TAG"
+  gradeValue     String? // "9" | "9.5" | "10"
+
+  priceHistory    PriceHistory[]
+  collectionItems CollectionItem[]
+
+  @@map("card_variants")
+}
+
+// 使用者實際擁有的那一張卡。
+model CollectionItem {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  variantId String
+  variant   CardVariant @relation(fields: [variantId], references: [id])
+
+  // 這兩個欄位刻意分離,不是同一段文字的兩種呈現方式:
+  // privateStory 只有本人看得到;shareCaption 是匯出展覽圖時才手動填寫的文字,
+  // 兩者完全獨立,避免私密回憶被誤分享出去。
+  privateStory String? @db.Text
+  shareCaption String? @db.Text
+
+  // self_reported(自行填寫)| certificate_uploaded(已上傳鑑定證書,未經平台驗證)| verified(官方鑑定機構驗證)
+  trustLevel String @default("self_reported")
+
+  status        String    @default("owned") // owned | listed | sold
+  acquiredDate  DateTime?
+  acquiredPrice Decimal?  @db.Decimal(12, 2)
+  createdAt     DateTime  @default(now())
+
+  itemTags       ItemTag[]
+  timelineEvents TimelineEvent[]
+  photos         Photo[]
+  transaction    Transaction?
+
+  @@map("collection_items")
+}
+
+// 標籤維度——使用者可以自訂新的分類維度(不只系列/用途/鑑定狀態),
+// 這就是「多維度、可自由切換的圓餅圖」背後的資料結構,概念上等同 Gmail 的標籤而不是資料夾。
+model TagDimension {
+  id              String  @id @default(uuid())
+  userId          String?
+  user            User?   @relation(fields: [userId], references: [id])
+  name            String // 例如「系列」「用途」「鑑定狀態」
+  isSystemDefault Boolean @default(false)
+
+  tags Tag[]
+
+  @@map("tag_dimensions")
+}
+
+model Tag {
+  id          String       @id @default(uuid())
+  dimensionId String
+  dimension   TagDimension @relation(fields: [dimensionId], references: [id])
+  name        String // 例如「柯南」「自己收藏」「PSA」
+
+  itemTags ItemTag[]
+
+  @@map("tags")
+}
+
+// 多對多關聯——一張卡可以同時貼上任意數量、任意維度的標籤。
+model ItemTag {
+  itemId String
+  item   CollectionItem @relation(fields: [itemId], references: [id])
+  tagId  String
+  tag    Tag            @relation(fields: [tagId], references: [id])
+
+  @@id([itemId, tagId])
+  @@map("item_tags")
+}
+
+// 依「版本」而非依「使用者擁有的實體」記錄價格,同一張卡的同一個版本
+// 全站只有一條價格曲線,避免重複儲存。
+model PriceHistory {
+  id         String      @id @default(uuid())
+  variantId  String
+  variant    CardVariant @relation(fields: [variantId], references: [id])
+  price      Decimal     @db.Decimal(12, 2)
+  currency   String      @default("TWD")
+  recordedAt DateTime
+  source     String // "pricecharting" | "tcggo" ...
+
+  @@map("price_history")
+}
+
+model TimelineEvent {
+  id        String         @id @default(uuid())
+  itemId    String
+  item      CollectionItem @relation(fields: [itemId], references: [id])
+  eventType String // acquired | sold | graded_submitted | story_added
+  eventDate DateTime
+  location  String?
+  note      String?
+
+  @@map("timeline_events")
+}
+
+model Photo {
+  id        String         @id @default(uuid())
+  itemId    String
+  item      CollectionItem @relation(fields: [itemId], references: [id])
+  url       String
+  isPrimary Boolean        @default(false)
+
+  @@map("photos")
+}
+
+// 出售紀錄——對外顯示名稱是「出售紀錄」,不是「已實現損益」,
+// 但資料庫欄位保留 realizedGain 方便計算,兩者互不衝突。
+model Transaction {
+  id           String         @id @default(uuid())
+  itemId       String         @unique
+  item         CollectionItem @relation(fields: [itemId], references: [id])
+  salePrice    Decimal        @db.Decimal(12, 2)
+  saleDate     DateTime
+  realizedGain Decimal?       @db.Decimal(12, 2)
+
+  @@map("transactions")
+}
