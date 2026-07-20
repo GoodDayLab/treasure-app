@@ -25,7 +25,20 @@ export interface CollectionCardDetail extends CollectionCardSummary {
   trustLevel: string;
   privateStory: string;
   shareCaption: string;
+  status: string;
   timeline: TimelineEntry[];
+}
+
+export interface SoldCardSummary {
+  id: string;
+  name: string;
+  game: string;
+  series: string;
+  variantLabel: string;
+  currency: string;
+  salePrice: number;
+  saleDate: string;
+  realizedGain: number | null;
 }
 
 export interface ShareableCard {
@@ -115,6 +128,7 @@ export async function getCardDetail(id: string): Promise<CollectionCardDetail | 
     trustLevel: item.trustLevel,
     privateStory: item.privateStory ?? "",
     shareCaption: item.shareCaption ?? "",
+    status: item.status,
     imageUrl: item.photos[0]?.url,
     timeline: item.timelineEvents.map((event) => ({
       id: event.id,
@@ -124,6 +138,34 @@ export async function getCardDetail(id: string): Promise<CollectionCardDetail | 
       note: event.note ?? undefined,
     })),
   };
+}
+
+export async function getSoldSummary(): Promise<SoldCardSummary[]> {
+  const items = await prisma.collectionItem.findMany({
+    where: { status: "sold" },
+    include: {
+      variant: { include: { card: true } },
+      transaction: true,
+    },
+  });
+
+  return items
+    .filter((item) => item.transaction !== null)
+    .map((item) => {
+      const transaction = item.transaction!;
+      return {
+        id: item.id,
+        name: item.variant.card.name,
+        game: item.variant.card.game,
+        series: item.variant.card.series,
+        variantLabel: variantLabel(item.variant),
+        currency: "TWD",
+        salePrice: Number(transaction.salePrice),
+        saleDate: transaction.saleDate.toISOString().slice(0, 10),
+        realizedGain: transaction.realizedGain != null ? Number(transaction.realizedGain) : null,
+      };
+    })
+    .sort((a, b) => (a.saleDate < b.saleDate ? 1 : -1));
 }
 
 // 給公開分享頁用——刻意只挑選安全欄位,privateStory / acquiredPrice / userId 一律不回傳。

@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { CardThumbnail } from "@/components/ui/CardThumbnail";
 import { MetricCard } from "@/components/ui/PriceTag";
-import { getCollectionSummary } from "@/lib/data";
+import { getCollectionSummary, getSoldSummary } from "@/lib/data";
 
 export default async function Home() {
-  const cards = await getCollectionSummary();
+  const [cards, soldCards] = await Promise.all([getCollectionSummary(), getSoldSummary()]);
 
   const totalValue = cards.reduce((sum, card) => sum + card.price, 0);
   const avgChange = cards.length > 0 ? cards.reduce((sum, card) => sum + card.changePercent, 0) / cards.length : 0;
@@ -44,6 +45,59 @@ export default async function Home() {
             />
           ))}
         </div>
+      )}
+
+      {soldCards.length > 0 && (
+        <section style={{ marginTop: 48 }}>
+          <h2 style={{ fontFamily: "var(--font-voice)", fontSize: 20, margin: "0 0 16px 0", color: "var(--color-text-primary)" }}>
+            已售出
+          </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {soldCards.map((card) => (
+              <Link
+                key={card.id}
+                href={`/cards/${card.id}`}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "12px 16px",
+                  background: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-ui)",
+                  textDecoration: "none",
+                  color: "inherit",
+                }}
+              >
+                <div>
+                  <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)" }}>
+                    {card.name}
+                  </div>
+                  <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-secondary)" }}>
+                    {card.game} · {card.series} · {card.saleDate} 售出
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                    {card.currency} {card.salePrice.toLocaleString()}
+                  </div>
+                  {card.realizedGain != null && (
+                    <div
+                      style={{
+                        fontFamily: "var(--font-ui)",
+                        fontSize: 12,
+                        color: card.realizedGain >= 0 ? "var(--color-success)" : "var(--color-danger)",
+                      }}
+                    >
+                      {card.realizedGain >= 0 ? "+" : ""}
+                      {card.realizedGain.toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
     </main>
   );

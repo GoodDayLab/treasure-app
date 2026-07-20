@@ -27,24 +27,69 @@ export function CardDetail({ card }: { card: CollectionCardDetail }) {
   const [story, setStory] = useState(card.privateStory);
   const [statusMessage, setStatusMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [showPriceInShare, setShowPriceInShare] = useState(true);
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [isSelling, setIsSelling] = useState(false);
+  const [showSellForm, setShowSellForm] = useState(false);
+  const [salePrice, setSalePrice] = useState(String(card.price));
+  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
 
+  // 分享圖是真的能發到 IG/X 的圖片(next/og 產生),不是連結——先抓圖再用原生分享選單帶檔案出去,
+  // 桌機/不支援檔案分享的瀏覽器就退回直接下載,讓使用者自己存到相簿分享。
   const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/share/${card.id}`;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: card.name, text: card.shareCaption || card.name, url: shareUrl });
-        return;
-      } catch {
-        // 使用者取消分享或該裝置不支援,退回用複製連結
-      }
-    }
+    setIsGeneratingShare(true);
+    setStatusMessage("");
 
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      setStatusMessage("已複製分享連結 ✓");
-    } catch {
-      setStatusMessage(shareUrl);
+      const response = await fetch(`/api/share-image/${card.id}?price=${showPriceInShare ? 1 : 0}`);
+      if (!response.ok) throw new Error("圖片產生失敗");
+      const blob = await response.blob();
+      const file = new File([blob], `${card.name}-treasure.png`, { type: "image/png" });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: card.name, text: card.shareCaption || card.name });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${card.name}-treasure.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+        setStatusMessage("圖片已下載,可以到相簿分享到 IG / X ✓");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        // 使用者自己取消分享,不用顯示錯誤
+      } else {
+        setStatusMessage(error instanceof Error ? error.message : "分享失敗");
+      }
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  };
+
+  const handleMarkSold = async () => {
+    setIsSelling(true);
+    setStatusMessage("");
+
+    try {
+      const response = await fetch(`/api/collection-items/${card.id}/sell`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salePrice: Number(salePrice), saleDate }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error ?? "標記失敗");
+      }
+
+      setStatusMessage("已標記為售出 ✓");
+      setShowSellForm(false);
+      router.refresh();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "標記失敗");
+    } finally {
+      setIsSelling(false);
     }
   };
 
@@ -118,6 +163,9 @@ export function CardDetail({ card }: { card: CollectionCardDetail }) {
 
           <span style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)" }}>
             鑑定狀態:{TRUST_LABEL[card.trustLevel] ?? card.trustLevel}
+            {card.status === "sold" && (
+              <span style={{ marginLeft: 8, color: "var(--color-accent-text)", fontWeight: 600 }}>・已售出</span>
+            )}
           </span>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
@@ -142,10 +190,70 @@ export function CardDetail({ card }: { card: CollectionCardDetail }) {
             <Button variant="ghost" onClick={() => setIsEditing((editing) => !editing)}>
               {isEditing ? "完成編輯" : "編輯"}
             </Button>
-            <Button variant="ghost" onClick={handleShare}>
-              分享
+            <Button variant="ghost" onClick={handleShare} disabled={isGeneratingShare}>
+              {isGeneratingShare ? "產生分享圖中…" : "分享"}
             </Button>
+            {card.status !== "sold" && (
+              <Button variant="ghost" onClick={() => setShowSellForm((show) => !show)}>
+                {showSellForm ? "取消" : "標記為已售出"}
+              </Button>
+            )}
           </div>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontFamily: "var(--font-ui)",
+              fontSize: 12,
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showPriceInShare}
+              onChange={(event) => setShowPriceInShare(event.target.checked)}
+            />
+            分享圖片顯示價格
+          </label>
+
+          {showSellForm && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                marginTop: 8,
+                padding: 12,
+                background: "var(--color-surface-muted)",
+                borderRadius: "var(--radius-ui)",
+              }}
+            >
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-secondary)" }}>
+                售出價格(NT$)
+                <input
+                  type="number"
+                  min={0}
+                  value={salePrice}
+                  onChange={(event) => setSalePrice(event.target.value)}
+                  style={{ padding: 6, borderRadius: "var(--radius-ui)", border: "1px solid var(--color-border)" }}
+                />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-secondary)" }}>
+                售出日期
+                <input
+                  type="date"
+                  value={saleDate}
+                  onChange={(event) => setSaleDate(event.target.value)}
+                  style={{ padding: 6, borderRadius: "var(--radius-ui)", border: "1px solid var(--color-border)" }}
+                />
+              </label>
+              <Button variant="primary" onClick={handleMarkSold} disabled={isSelling}>
+                {isSelling ? "處理中…" : "確認售出"}
+              </Button>
+            </div>
+          )}
 
           {statusMessage && (
             <span style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-success)" }}>
