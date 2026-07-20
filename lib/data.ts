@@ -41,6 +41,27 @@ export interface SoldCardSummary {
   realizedGain: number | null;
 }
 
+export interface TagDimensionWithTags {
+  id: string;
+  name: string;
+  tags: { id: string; name: string }[];
+}
+
+export interface LotSummary {
+  id: string;
+  name: string;
+  totalPrice: number;
+  cardCount: number;
+  avgPrice: number;
+  linkedItemCount: number;
+  acquiredDate: string | null;
+  source: string | null;
+}
+
+export interface LotDetail extends LotSummary {
+  items: { id: string; name: string; variantLabel: string }[];
+}
+
 export interface ShareableCard {
   id: string;
   name: string;
@@ -166,6 +187,71 @@ export async function getSoldSummary(): Promise<SoldCardSummary[]> {
       };
     })
     .sort((a, b) => (a.saleDate < b.saleDate ? 1 : -1));
+}
+
+export async function getTagDimensions(): Promise<TagDimensionWithTags[]> {
+  const dimensions = await prisma.tagDimension.findMany({
+    include: { tags: { orderBy: { name: "asc" } } },
+    orderBy: { name: "asc" },
+  });
+
+  return dimensions.map((dimension) => ({
+    id: dimension.id,
+    name: dimension.name,
+    tags: dimension.tags.map((tag) => ({ id: tag.id, name: tag.name })),
+  }));
+}
+
+function toLotSummary(lot: {
+  id: string;
+  name: string;
+  totalPrice: unknown;
+  cardCount: number;
+  acquiredDate: Date | null;
+  source: string | null;
+  _count: { items: number };
+}): LotSummary {
+  const totalPrice = Number(lot.totalPrice);
+  return {
+    id: lot.id,
+    name: lot.name,
+    totalPrice,
+    cardCount: lot.cardCount,
+    avgPrice: lot.cardCount > 0 ? totalPrice / lot.cardCount : 0,
+    linkedItemCount: lot._count.items,
+    acquiredDate: lot.acquiredDate ? lot.acquiredDate.toISOString().slice(0, 10) : null,
+    source: lot.source,
+  };
+}
+
+export async function getLots(): Promise<LotSummary[]> {
+  const lots = await prisma.acquisitionLot.findMany({
+    include: { _count: { select: { items: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return lots.map(toLotSummary);
+}
+
+export async function getLotDetail(id: string): Promise<LotDetail | null> {
+  const lot = await prisma.acquisitionLot.findUnique({
+    where: { id },
+    include: {
+      _count: { select: { items: true } },
+      items: { include: { variant: { include: { card: true } } } },
+    },
+  });
+
+  if (!lot) return null;
+
+  return {
+    ...toLotSummary(lot),
+    items: lot.items.map((item) => ({
+      id: item.id,
+      name: item.variant.card.name,
+      variantLabel: variantLabel(item.variant),
+    })),
+  };
 }
 
 // 給公開分享頁用——刻意只挑選安全欄位,privateStory / acquiredPrice / userId 一律不回傳。

@@ -20,8 +20,29 @@ model User {
 
   collectionItems CollectionItem[]
   tagDimensions   TagDimension[]
+  acquisitionLots AcquisitionLot[]
 
   @@map("users")
+}
+
+// 整批進貨——例如「疾風光輝這系列一次買一箱」,只知道整批花多少錢、買了幾張,
+// 不知道單張成本。cardCount 是整批實際張數,可能比已建檔進系統的卡片數量多
+// (買了一箱但只挑幾張建檔)。平均成本 = totalPrice / cardCount,建檔時算給每張卡的
+// acquiredPrice,之後如果改了 totalPrice 或 cardCount 要重新算一次並回寫。
+model AcquisitionLot {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  name         String // 例如「疾風光輝」
+  totalPrice   Decimal   @db.Decimal(12, 2)
+  cardCount    Int
+  acquiredDate DateTime?
+  source       String?
+  createdAt    DateTime  @default(now())
+
+  items CollectionItem[]
+
+  @@map("acquisition_lots")
 }
 
 // 卡牌型錄——同一張卡的「基本資料」只存一份,不管有幾個使用者擁有它。
@@ -78,6 +99,10 @@ model CollectionItem {
   acquiredPrice Decimal?  @db.Decimal(12, 2)
   createdAt     DateTime  @default(now())
 
+  // 這張卡是不是某一批進貨的一部分——單張建檔就留空,群組建檔就指向該批。
+  lotId String?
+  lot   AcquisitionLot? @relation(fields: [lotId], references: [id])
+
   itemTags       ItemTag[]
   timelineEvents TimelineEvent[]
   photos         Photo[]
@@ -107,6 +132,8 @@ model Tag {
   name        String // 例如「柯南」「自己收藏」「PSA」
 
   itemTags ItemTag[]
+
+  @@unique([dimensionId, name])
 
   @@map("tags")
 }
