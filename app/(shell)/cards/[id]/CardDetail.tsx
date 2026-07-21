@@ -8,7 +8,8 @@ import { PhotoFrame } from "@/components/ui/PhotoFrame";
 import { PriceTag } from "@/components/ui/PriceTag";
 import { TagPill, AddTagPill } from "@/components/ui/TagPill";
 import { SectionCard } from "@/components/ui/SectionCard";
-import { TimelineItem } from "@/components/ui/TimelineItem";
+import { PriceTrendChart } from "@/components/charts/PriceTrendChart";
+import { TimelineManager } from "./TimelineManager";
 import type { CollectionCardDetail } from "@/lib/data";
 
 const TRUST_LABEL: Record<string, string> = {
@@ -264,6 +265,10 @@ export function CardDetail({ card }: { card: CollectionCardDetail }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 32 }}>
+        <SectionCard title="價格走勢">
+          <PriceTrendChart points={card.priceHistory} currency={card.currency} />
+        </SectionCard>
+
         <SectionCard title="收藏故事">
           {isEditing ? (
             <textarea
@@ -293,18 +298,7 @@ export function CardDetail({ card }: { card: CollectionCardDetail }) {
         </SectionCard>
 
         <SectionCard title="時間軸">
-          <div>
-            {card.timeline.map((event, index) => (
-              <TimelineItem
-                key={event.id}
-                eventType={event.eventType}
-                eventDate={event.eventDate}
-                location={event.location}
-                note={event.note}
-                isLast={index === card.timeline.length - 1}
-              />
-            ))}
-          </div>
+          <TimelineManager itemId={card.id} events={card.timeline} />
         </SectionCard>
       </div>
     </main>

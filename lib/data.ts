@@ -26,6 +26,7 @@ export interface CollectionCardDetail extends CollectionCardSummary {
   privateStory: string;
   shareCaption: string;
   status: string;
+  priceHistory: PricePoint[];
   timeline: TimelineEntry[];
 }
 
@@ -39,6 +40,22 @@ export interface SoldCardSummary {
   salePrice: number;
   saleDate: string;
   realizedGain: number | null;
+}
+
+export interface TagBreakdownSegment {
+  label: string;
+  count: number;
+}
+
+export interface TagBreakdown {
+  dimensionId: string;
+  dimensionName: string;
+  segments: TagBreakdownSegment[];
+}
+
+export interface PricePoint {
+  price: number;
+  recordedAt: string;
 }
 
 export interface TagDimensionWithTags {
@@ -81,9 +98,11 @@ function variantLabel(variant: { variantType: string; gradingCompany: string | n
   return [variant.gradingCompany, variant.gradeValue].filter(Boolean).join(" ");
 }
 
-// 只有兩個價格點以上才算得出漲跌幅,否則視為持平——避免除以零或顯示假數字。
+// priceHistory 這裡固定是「由舊到新」排序。只有兩個價格點以上才算得出漲跌幅,
+// 否則視為持平——避免除以零或顯示假數字。
 function priceAndChange(priceHistory: { price: unknown; currency: string }[]) {
-  const [latest, previous] = priceHistory;
+  const latest = priceHistory[priceHistory.length - 1];
+  const previous = priceHistory[priceHistory.length - 2];
   const price = latest ? Number(latest.price) : 0;
   const previousPrice = previous ? Number(previous.price) : 0;
   const changePercent = latest && previous && previousPrice !== 0 ? ((price - previousPrice) / previousPrice) * 100 : 0;
@@ -92,7 +111,7 @@ function priceAndChange(priceHistory: { price: unknown; currency: string }[]) {
 
 const variantWithPriceInclude = {
   card: true,
-  priceHistory: { orderBy: { recordedAt: "desc" as const }, take: 2 },
+  priceHistory: { orderBy: { recordedAt: "asc" as const }, take: 100 },
 };
 
 export async function getCollectionSummary(): Promise<CollectionCardSummary[]> {
@@ -151,6 +170,10 @@ export async function getCardDetail(id: string): Promise<CollectionCardDetail | 
     shareCaption: item.shareCaption ?? "",
     status: item.status,
     imageUrl: item.photos[0]?.url,
+    priceHistory: item.variant.priceHistory.map((point) => ({
+      price: Number(point.price),
+      recordedAt: point.recordedAt.toISOString().slice(0, 10),
+    })),
     timeline: item.timelineEvents.map((event) => ({
       id: event.id,
       eventType: event.eventType,
@@ -187,6 +210,35 @@ export async function getSoldSummary(): Promise<SoldCardSummary[]> {
       };
     })
     .sort((a, b) => (a.saleDate < b.saleDate ? 1 : -1));
+}
+
+// 圓餅圖用——依標籤維度統計「owned」卡片的分佈,對應 schema 註解裡
+// 「多維度、可自由切換的圓餅圖」的原始設計:一個維度一組圓餅圖,使用者可以自己切換看哪個維度。
+export async function getTagBreakdowns(): Promise<TagBreakdown[]> {
+  const dimensions = await prisma.tagDimension.findMany({
+    include: {
+      tags: {
+        include: {
+          itemTags: { include: { item: true } },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return dimensions
+    .map((dimension) => {
+      const segments = dimension.tags
+        .map((tag) => ({
+          label: tag.name,
+          count: tag.itemTags.filter((itemTag) => itemTag.item.status === "owned").length,
+        }))
+        .filter((segment) => segment.count > 0)
+        .sort((a, b) => b.count - a.count);
+
+      return { dimensionId: dimension.id, dimensionName: dimension.name, segments };
+    })
+    .filter((dimension) => dimension.segments.length > 0);
 }
 
 export async function getTagDimensions(): Promise<TagDimensionWithTags[]> {

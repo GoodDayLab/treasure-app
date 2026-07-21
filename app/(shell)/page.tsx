@@ -1,13 +1,21 @@
 import Link from "next/link";
 import { CardThumbnail } from "@/components/ui/CardThumbnail";
-import { MetricCard } from "@/components/ui/PriceTag";
-import { getCollectionSummary, getSoldSummary } from "@/lib/data";
+import { MetricCard, PriceTag } from "@/components/ui/PriceTag";
+import { TagBreakdownChart } from "@/components/charts/TagBreakdownChart";
+import { getCollectionSummary, getSoldSummary, getTagBreakdowns } from "@/lib/data";
 
 export default async function Home() {
-  const [cards, soldCards] = await Promise.all([getCollectionSummary(), getSoldSummary()]);
+  const [cards, soldCards, tagBreakdowns] = await Promise.all([
+    getCollectionSummary(),
+    getSoldSummary(),
+    getTagBreakdowns(),
+  ]);
 
   const totalValue = cards.reduce((sum, card) => sum + card.price, 0);
   const avgChange = cards.length > 0 ? cards.reduce((sum, card) => sum + card.changePercent, 0) / cards.length : 0;
+
+  const topGainers = [...cards].filter((c) => c.changePercent > 0).sort((a, b) => b.changePercent - a.changePercent).slice(0, 3);
+  const topLosers = [...cards].filter((c) => c.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent).slice(0, 3);
 
   return (
     <main style={{ maxWidth: 1040, margin: "0 auto", padding: "40px 24px" }}>
@@ -25,6 +33,65 @@ export default async function Home() {
         <MetricCard label="總市值" value={`NT$ ${totalValue.toLocaleString()}`} />
         <MetricCard label="平均漲跌" value={`${avgChange >= 0 ? "+" : ""}${avgChange.toFixed(1)}%`} />
       </div>
+
+      {(topGainers.length > 0 || topLosers.length > 0) && (
+        <section style={{ marginBottom: 40 }}>
+          <h2 style={{ fontFamily: "var(--font-voice)", fontSize: 20, margin: "0 0 4px 0", color: "var(--color-text-primary)" }}>
+            漲跌排行
+          </h2>
+          <p style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)", marginBottom: 16 }}>
+            依目前記錄到的價格區間計算,還沒接上每日價格資料源
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+            <div>
+              <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+                漲幅前 3 名
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {topGainers.map((card) => (
+                  <Link
+                    key={card.id}
+                    href={`/cards/${card.id}`}
+                    style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-ui)", fontSize: 13, textDecoration: "none", color: "var(--color-text-primary)" }}
+                  >
+                    <span>{card.name}</span>
+                    <PriceTag changePercent={card.changePercent} />
+                  </Link>
+                ))}
+                {topGainers.length === 0 && (
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)" }}>目前沒有上漲的卡</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+                跌幅前 3 名
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {topLosers.map((card) => (
+                  <Link
+                    key={card.id}
+                    href={`/cards/${card.id}`}
+                    style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-ui)", fontSize: 13, textDecoration: "none", color: "var(--color-text-primary)" }}
+                  >
+                    <span>{card.name}</span>
+                    <PriceTag changePercent={card.changePercent} />
+                  </Link>
+                ))}
+                {topLosers.length === 0 && (
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)" }}>目前沒有下跌的卡</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {tagBreakdowns.length > 0 && (
+        <section style={{ marginBottom: 40 }}>
+          <TagBreakdownChart breakdowns={tagBreakdowns} />
+        </section>
+      )}
 
       {cards.length === 0 ? (
         <p style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--color-text-muted)" }}>
